@@ -2,15 +2,24 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "os_kernel.h"
+#include <string.h>
 
-#define OS_NO_OWNER 0xFFFFFFFFUL
+#define ICSR (*(volatile uint32_t *)0xE000ED04UL)
 
 extern volatile uint32_t osCurrentTask;
+extern volatile TCB_t _tcbs[OS_MAX_TASKS];
 
 void osMutexInit(Mutex_t *mutex)
 {
+    /* Initailze mutex queue*/
+    mutex->waitCount = 0;
+    mutex->waitHead = 0;
+    mutex->waitTail = 0;
+    memset(&mutex->waitQueue, 0, sizeof(mutex->waitQueue));
+
+    /* Initailze mutex */
     mutex->locked = 0;
-    mutex->ownerTask = OS_NO_OWNER;
+    mutex->ownerTask = MUTEX_NO_OWNER;
 }
 
 /* Atomic try-lock using exclusive monitor */
@@ -49,22 +58,78 @@ static uint8_t _mutexTryLock(volatile uint8_t *lock)
 
 void osMutexAcquire(Mutex_t *mutex)
 {
-    /* busy wait*/
-    while (!_mutexTryLock(&(mutex->locked)))
+    __asm volatile("CPSID I");
+
+    if (!_mutexTryLock(&(mutex->locked)))
     {
-        osTaskDelay(1); /* wait 1 sec */
+        if (!_mutexEnqueue(mutex, osCurrentTask))
+        {
+            __asm volatile("CPSIE I");
+            return;
+        }
+        _tcbs[osCurrentTask].state = TASK_BLOCKED;
+        ICSR = (1U << 28); /* PendSV set pending */
     }
-    mutex->ownerTask = osCurrentTask;
+    else
+    {
+        mutex->ownerTask = osCurrentTask;
+    }
+    __asm volatile("CPSIE I");
 }
 
 void osMutexRelease(Mutex_t *mutex)
 {
+    __asm volatile("CPSID I");
+
     if (mutex->ownerTask != osCurrentTask)
     {
+        __asm volatile("CPSIE I");
         return;
     }
-    mutex->ownerTask = OS_NO_OWNER;
-    __asm volatile("DMB" ::: "memory"); /* Ensure all previous memory writes are visible before the mutex is unlocked  */
 
-    mutex->locked = 0;
+    uint32_t nextOwner = _mutexDequeue(mutex);
+    if (nextOwner != MUTEX_NO_OWNER)
+    {
+        _tcbs[nextOwner].state = TASK_READY;
+        mutex->ownerTask = nextOwner;
+        ICSR = (1U << 28); /* PendSV set pending */
+        __asm volatile("CPSIE I");
+        return;
+    }
+    else
+    {
+        mutex->ownerTask = MUTEX_NO_OWNER;
+        __asm volatile("DMB" ::: "memory"); /* Ensure all previous memory writes are visible before the mutex is unlocked  */
+
+        mutex->locked = 0;
+    }
+    ICSR = (1U << 28); /* PendSV set pending */
+    __asm volatile("CPSIE I");
+}
+uint8_t _mutexEnqueue(Mutex_t *mutex, uint32_t taskIndex)
+{
+    if (mutex->waitCount >= MUTEX_QUEUE_SIZE)
+    {
+        return 0;
+    }
+
+    mutex->waitQueue[mutex->waitTail] = taskIndex;
+    mutex->waitTail = (mutex->waitTail + 1) % MUTEX_QUEUE_SIZE;
+    mutex->waitCount++;
+
+    return 1;
+}
+uint32_t _mutexDequeue(Mutex_t *mutex)
+{
+    if (mutex->waitCount == 0)
+    {
+        return MUTEX_NO_OWNER;
+    }
+
+    uint32_t newTaskIndex = mutex->waitQueue[mutex->waitHead];
+
+    mutex->waitHead = (mutex->waitHead + 1) % MUTEX_QUEUE_SIZE;
+    mutex->waitCount--;
+
+    return newTaskIndex;
 }
