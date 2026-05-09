@@ -14,6 +14,9 @@ LDFLAGS = -T stm32f407.ld -Wl,--gc-sections
 
 C_SRCS = Core/startup.c \
          Core/mutex.c \
+         Core/uart.c \
+         Core/queue.c \
+         Core/semaphore.c \
          Core/systick.c \
          Core/os_kernel.c \
          Core/main.c \

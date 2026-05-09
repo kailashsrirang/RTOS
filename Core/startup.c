@@ -31,7 +31,7 @@ void Reset_Handler(void)
     uint32_t *src, *dst;
 
     /*  Copy .data section from Flash to RAM */
-    src = &_sdata;
+    src = &_sidata;
     dst = &_sdata;
     while (dst < &_edata)
     {

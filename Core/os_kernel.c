@@ -1,6 +1,8 @@
 #include "os_kernel.h"
 #include <stdint.h>
 #include <string.h>
+#include "mem.h"
+#include "uart.h"
 
 #define ICSR (*(volatile uint32_t *)0xE000ED04UL)
 
@@ -79,6 +81,10 @@ void osTaskCreate(void (*taskFunc)(void *), void *arg)
     _initTaskStack(taskIndex, taskFunc, arg);
 
     _taskCount++;
+
+    // char info[50];
+    // snprintf(info, sizeof(info), "Task %d Created", taskIndex);
+    // uart4_println(info);
 }
 
 void osScheduler()
@@ -118,7 +124,11 @@ void SysTick_Handler(void)
 
     if (osNextTask != osCurrentTask) /* Prevent useless context switch */
     {
-        ICSR |= (1U << 28); /* PendSV set pending */
+        // char info[50];
+        // snprintf(info, sizeof(info), "Os scheduler chose osNextTask %d. PendingSV...", osNextTask);
+        // uart4_println(info);
+
+        ICSR = (1U << 28); /* PendSV set pending */
     }
 }
 

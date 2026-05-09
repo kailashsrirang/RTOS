@@ -106,6 +106,7 @@ void osMutexRelease(Mutex_t *mutex)
     ICSR = (1U << 28); /* PendSV set pending */
     __asm volatile("CPSIE I");
 }
+
 uint8_t _mutexEnqueue(Mutex_t *mutex, uint32_t taskIndex)
 {
     if (mutex->waitCount >= MUTEX_QUEUE_SIZE)
