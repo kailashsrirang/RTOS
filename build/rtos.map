@@ -7,7 +7,6 @@ Discarded input sections
  .text          0x00000000        0x0 build/bsp/stm32f407g-disc1/system/systick.o
  .data          0x00000000        0x0 build/bsp/stm32f407g-disc1/system/systick.o
  .bss           0x00000000        0x0 build/bsp/stm32f407g-disc1/system/systick.o
- .bss._osTick   0x00000000        0x4 build/bsp/stm32f407g-disc1/system/systick.o
  .text.osGetTick
                 0x00000000       0x18 build/bsp/stm32f407g-disc1/system/systick.o
  .text          0x00000000        0x0 build/kernel/src/mutex.o
@@ -99,7 +98,7 @@ LOAD build/lib/src/mem.o
 LOAD build/app/demo/main.o
 LOAD build/kernel/arch/arm/cortex-m4/os_context.o
 
-.text           0x08000000      0xd4a
+.text           0x08000000      0xd5e
  *(.vectors)
  .vectors       0x08000000       0x40 build/bsp/stm32f407g-disc1/startup/startup.o
                 0x08000000                vector_table
@@ -118,157 +117,159 @@ LOAD build/kernel/arch/arm/cortex-m4/os_context.o
                 0x08000048       0x60 build/bsp/stm32f407g-disc1/startup/startup.o
                 0x08000048                Reset_Handler
  .text.SysTick_Init
-                0x080000a8       0x44 build/bsp/stm32f407g-disc1/system/systick.o
+                0x080000a8       0x4c build/bsp/stm32f407g-disc1/system/systick.o
                 0x080000a8                SysTick_Init
  .text.osTaskExit
-                0x080000ec        0x8 build/kernel/src/os_kernel.o
+                0x080000f4        0x8 build/kernel/src/os_kernel.o
  .text._initTaskStack
-                0x080000f4      0x190 build/kernel/src/os_kernel.o
+                0x080000fc      0x190 build/kernel/src/os_kernel.o
  .text.osKernelInit
-                0x08000284       0x44 build/kernel/src/os_kernel.o
-                0x08000284                osKernelInit
+                0x0800028c       0x44 build/kernel/src/os_kernel.o
+                0x0800028c                osKernelInit
  .text.osTaskCreate
-                0x080002c8       0x50 build/kernel/src/os_kernel.o
-                0x080002c8                osTaskCreate
+                0x080002d0       0x50 build/kernel/src/os_kernel.o
+                0x080002d0                osTaskCreate
  .text.osScheduler
-                0x08000318       0x94 build/kernel/src/os_kernel.o
-                0x08000318                osScheduler
+                0x08000320       0x94 build/kernel/src/os_kernel.o
+                0x08000320                osScheduler
  .text.SysTick_Handler
-                0x080003ac       0xcc build/kernel/src/os_kernel.o
-                0x080003ac                SysTick_Handler
+                0x080003b4       0xd8 build/kernel/src/os_kernel.o
+                0x080003b4                SysTick_Handler
  .text.osTaskDelay
-                0x08000478       0x60 build/kernel/src/os_kernel.o
-                0x08000478                osTaskDelay
+                0x0800048c       0x60 build/kernel/src/os_kernel.o
+                0x0800048c                osTaskDelay
  .text.osKernelStart
-                0x080004d8       0x30 build/kernel/src/os_kernel.o
-                0x080004d8                osKernelStart
+                0x080004ec       0x30 build/kernel/src/os_kernel.o
+                0x080004ec                osKernelStart
  .text.osQueueInit
-                0x08000508       0x26 build/kernel/src/queue.o
-                0x08000508                osQueueInit
+                0x0800051c       0x26 build/kernel/src/queue.o
+                0x0800051c                osQueueInit
  .text._semEnqueue
-                0x0800052e       0x66 build/kernel/src/semaphore.o
+                0x08000542       0x66 build/kernel/src/semaphore.o
  .text._semDequeue
-                0x08000594       0x66 build/kernel/src/semaphore.o
- .text.SemInit  0x080005fa       0x52 build/kernel/src/semaphore.o
-                0x080005fa                SemInit
- .text.SemWait  0x0800064c       0x70 build/kernel/src/semaphore.o
-                0x0800064c                SemWait
+                0x080005a8       0x66 build/kernel/src/semaphore.o
+ .text.SemInit  0x0800060e       0x52 build/kernel/src/semaphore.o
+                0x0800060e                SemInit
+ .text.SemWait  0x08000660       0x70 build/kernel/src/semaphore.o
+                0x08000660                SemWait
  .text.SemSignal
-                0x080006bc       0x78 build/kernel/src/semaphore.o
-                0x080006bc                SemSignal
+                0x080006d0       0x78 build/kernel/src/semaphore.o
+                0x080006d0                SemSignal
  .text.uart4_init
-                0x08000734       0xb8 build/drivers/stm32f4/src/uart.o
-                0x08000734                uart4_init
+                0x08000748       0xb8 build/drivers/stm32f4/src/uart.o
+                0x08000748                uart4_init
  .text.uart4_write
-                0x080007ec       0x34 build/drivers/stm32f4/src/uart.o
-                0x080007ec                uart4_write
+                0x08000800       0x34 build/drivers/stm32f4/src/uart.o
+                0x08000800                uart4_write
  .text.uart4_print
-                0x08000820       0x2a build/drivers/stm32f4/src/uart.o
-                0x08000820                uart4_print
+                0x08000834       0x2a build/drivers/stm32f4/src/uart.o
+                0x08000834                uart4_print
  .text.uart4_println
-                0x0800084a       0x22 build/drivers/stm32f4/src/uart.o
-                0x0800084a                uart4_println
- .text.memset   0x0800086c       0x36 build/lib/src/mem.o
-                0x0800086c                memset
- *fill*         0x080008a2        0x2 
- .text.itoa     0x080008a4       0xb8 build/lib/src/mem.o
+                0x0800085e       0x22 build/drivers/stm32f4/src/uart.o
+                0x0800085e                uart4_println
+ .text.memset   0x08000880       0x36 build/lib/src/mem.o
+                0x08000880                memset
+ *fill*         0x080008b6        0x2 
+ .text.itoa     0x080008b8       0xb8 build/lib/src/mem.o
  .text.snprintf
-                0x0800095c      0x166 build/lib/src/mem.o
-                0x0800095c                snprintf
- *fill*         0x08000ac2        0x2 
+                0x08000970      0x166 build/lib/src/mem.o
+                0x08000970                snprintf
+ *fill*         0x08000ad6        0x2 
  .text.taskReceiver
-                0x08000ac4       0x5c build/app/demo/main.o
-                0x08000ac4                taskReceiver
+                0x08000ad8       0x5c build/app/demo/main.o
+                0x08000ad8                taskReceiver
  .text.taskProducer
-                0x08000b20       0x88 build/app/demo/main.o
-                0x08000b20                taskProducer
+                0x08000b34       0x88 build/app/demo/main.o
+                0x08000b34                taskProducer
  .text.idleTask
-                0x08000ba8        0xc build/app/demo/main.o
-                0x08000ba8                idleTask
- .text.main     0x08000bb4       0x98 build/app/demo/main.o
-                0x08000bb4                main
- .text          0x08000c4c       0x48 build/kernel/arch/arm/cortex-m4/os_context.o
-                0x08000c4c                PendSV_Handler
+                0x08000bbc        0xc build/app/demo/main.o
+                0x08000bbc                idleTask
+ .text.main     0x08000bc8       0x98 build/app/demo/main.o
+                0x08000bc8                main
+ .text          0x08000c60       0x48 build/kernel/arch/arm/cortex-m4/os_context.o
+                0x08000c60                PendSV_Handler
  *(.rodata*)
- .rodata        0x08000c94       0x25 build/lib/src/mem.o
- *fill*         0x08000cb9        0x3 
- .rodata        0x08000cbc       0x8e build/app/demo/main.o
-                0x08000d4a                        _etext = .
+ .rodata        0x08000ca8       0x25 build/lib/src/mem.o
+ *fill*         0x08000ccd        0x3 
+ .rodata        0x08000cd0       0x8e build/app/demo/main.o
+                0x08000d5e                        _etext = .
 
-.glue_7         0x08000d4c        0x0
- .glue_7        0x08000d4c        0x0 linker stubs
+.glue_7         0x08000d60        0x0
+ .glue_7        0x08000d60        0x0 linker stubs
 
-.glue_7t        0x08000d4c        0x0
- .glue_7t       0x08000d4c        0x0 linker stubs
+.glue_7t        0x08000d60        0x0
+ .glue_7t       0x08000d60        0x0 linker stubs
 
-.vfp11_veneer   0x08000d4c        0x0
- .vfp11_veneer  0x08000d4c        0x0 linker stubs
+.vfp11_veneer   0x08000d60        0x0
+ .vfp11_veneer  0x08000d60        0x0 linker stubs
 
-.v4_bx          0x08000d4c        0x0
- .v4_bx         0x08000d4c        0x0 linker stubs
+.v4_bx          0x08000d60        0x0
+ .v4_bx         0x08000d60        0x0 linker stubs
 
-.iplt           0x08000d4c        0x0
- .iplt          0x08000d4c        0x0 build/bsp/stm32f407g-disc1/startup/startup.o
+.iplt           0x08000d60        0x0
+ .iplt          0x08000d60        0x0 build/bsp/stm32f407g-disc1/startup/startup.o
 
-.rel.dyn        0x08000d4c        0x0
- .rel.iplt      0x08000d4c        0x0 build/bsp/stm32f407g-disc1/startup/startup.o
+.rel.dyn        0x08000d60        0x0
+ .rel.iplt      0x08000d60        0x0 build/bsp/stm32f407g-disc1/startup/startup.o
 
-.data           0x20000000        0x0 load address 0x08000d4a
+.data           0x20000000        0x0 load address 0x08000d5e
                 0x20000000                        _sdata = .
  *(.data*)
                 0x20000000                        _edata = .
-                0x08000d4a                        _sidata = LOADADDR (.data)
+                0x08000d5e                        _sidata = LOADADDR (.data)
 
-.igot.plt       0x20000000        0x0 load address 0x08000d4a
+.igot.plt       0x20000000        0x0 load address 0x08000d5e
  .igot.plt      0x20000000        0x0 build/bsp/stm32f407g-disc1/startup/startup.o
 
-.bss            0x20000000      0xd14 load address 0x08000d4a
+.bss            0x20000000      0xd18 load address 0x08000d5e
                 0x20000000                        _sbss = .
  *(.bss*)
+ .bss._osTick   0x20000000        0x4 build/bsp/stm32f407g-disc1/system/systick.o
+                0x20000000                _osTick
  .bss._taskStacks
-                0x20000000      0xc00 build/kernel/src/os_kernel.o
- .bss._tcbs     0x20000c00       0x24 build/kernel/src/os_kernel.o
-                0x20000c00                _tcbs
+                0x20000004      0xc00 build/kernel/src/os_kernel.o
+ .bss._tcbs     0x20000c04       0x24 build/kernel/src/os_kernel.o
+                0x20000c04                _tcbs
  .bss._taskCount
-                0x20000c24        0x1 build/kernel/src/os_kernel.o
- *fill*         0x20000c25        0x3 
+                0x20000c28        0x1 build/kernel/src/os_kernel.o
+ *fill*         0x20000c29        0x3 
  .bss.osCurrentTask
-                0x20000c28        0x4 build/kernel/src/os_kernel.o
-                0x20000c28                osCurrentTask
- .bss.osNextTask
                 0x20000c2c        0x4 build/kernel/src/os_kernel.o
-                0x20000c2c                osNextTask
- .bss.dataSem   0x20000c30       0x2c build/app/demo/main.o
- .bss.logSem    0x20000c5c       0x2c build/app/demo/main.o
-                0x20000c5c                logSem
- .bss.q         0x20000c88       0x8c build/app/demo/main.o
+                0x20000c2c                osCurrentTask
+ .bss.osNextTask
+                0x20000c30        0x4 build/kernel/src/os_kernel.o
+                0x20000c30                osNextTask
+ .bss.dataSem   0x20000c34       0x2c build/app/demo/main.o
+ .bss.logSem    0x20000c60       0x2c build/app/demo/main.o
+                0x20000c60                logSem
+ .bss.q         0x20000c8c       0x8c build/app/demo/main.o
  *(COMMON)
-                0x20000d14                        _ebss = .
+                0x20000d18                        _ebss = .
                 0x20020000                        _estack = (ORIGIN (RAM) + LENGTH (RAM))
 OUTPUT(build/rtos.elf elf32-littlearm)
 LOAD linker stubs
 
-.debug_info     0x00000000     0x156b
+.debug_info     0x00000000     0x1577
  .debug_info    0x00000000      0x12c build/bsp/stm32f407g-disc1/startup/startup.o
  .debug_info    0x0000012c       0xd7 build/bsp/stm32f407g-disc1/system/systick.o
- .debug_info    0x00000203      0x323 build/kernel/src/os_kernel.o
- .debug_info    0x00000526      0x43e build/kernel/src/queue.o
- .debug_info    0x00000964      0x2e9 build/kernel/src/semaphore.o
- .debug_info    0x00000c4d      0x16d build/drivers/stm32f4/src/uart.o
- .debug_info    0x00000dba      0x322 build/lib/src/mem.o
- .debug_info    0x000010dc      0x46b build/app/demo/main.o
- .debug_info    0x00001547       0x24 build/kernel/arch/arm/cortex-m4/os_context.o
+ .debug_info    0x00000203      0x32f build/kernel/src/os_kernel.o
+ .debug_info    0x00000532      0x43e build/kernel/src/queue.o
+ .debug_info    0x00000970      0x2e9 build/kernel/src/semaphore.o
+ .debug_info    0x00000c59      0x16d build/drivers/stm32f4/src/uart.o
+ .debug_info    0x00000dc6      0x322 build/lib/src/mem.o
+ .debug_info    0x000010e8      0x46b build/app/demo/main.o
+ .debug_info    0x00001553       0x24 build/kernel/arch/arm/cortex-m4/os_context.o
 
-.debug_abbrev   0x00000000      0xa58
+.debug_abbrev   0x00000000      0xa6b
  .debug_abbrev  0x00000000       0xd8 build/bsp/stm32f407g-disc1/startup/startup.o
  .debug_abbrev  0x000000d8       0xa9 build/bsp/stm32f407g-disc1/system/systick.o
- .debug_abbrev  0x00000181      0x1e3 build/kernel/src/os_kernel.o
- .debug_abbrev  0x00000364      0x19a build/kernel/src/queue.o
- .debug_abbrev  0x000004fe      0x17f build/kernel/src/semaphore.o
- .debug_abbrev  0x0000067d       0xdc build/drivers/stm32f4/src/uart.o
- .debug_abbrev  0x00000759      0x13b build/lib/src/mem.o
- .debug_abbrev  0x00000894      0x1b0 build/app/demo/main.o
- .debug_abbrev  0x00000a44       0x14 build/kernel/arch/arm/cortex-m4/os_context.o
+ .debug_abbrev  0x00000181      0x1f6 build/kernel/src/os_kernel.o
+ .debug_abbrev  0x00000377      0x19a build/kernel/src/queue.o
+ .debug_abbrev  0x00000511      0x17f build/kernel/src/semaphore.o
+ .debug_abbrev  0x00000690       0xdc build/drivers/stm32f4/src/uart.o
+ .debug_abbrev  0x0000076c      0x13b build/lib/src/mem.o
+ .debug_abbrev  0x000008a7      0x1b0 build/app/demo/main.o
+ .debug_abbrev  0x00000a57       0x14 build/kernel/arch/arm/cortex-m4/os_context.o
 
 .debug_aranges  0x00000000      0x228
  .debug_aranges
@@ -309,22 +310,22 @@ LOAD linker stubs
  .debug_rnglists
                 0x00000135       0x33 build/app/demo/main.o
 
-.debug_line     0x00000000     0x1180
+.debug_line     0x00000000     0x118d
  .debug_line    0x00000000       0xfe build/bsp/stm32f407g-disc1/startup/startup.o
- .debug_line    0x000000fe       0xf4 build/bsp/stm32f407g-disc1/system/systick.o
- .debug_line    0x000001f2      0x32b build/kernel/src/os_kernel.o
- .debug_line    0x0000051d      0x2c9 build/kernel/src/queue.o
- .debug_line    0x000007e6      0x269 build/kernel/src/semaphore.o
- .debug_line    0x00000a4f      0x1e6 build/drivers/stm32f4/src/uart.o
- .debug_line    0x00000c35      0x2d6 build/lib/src/mem.o
- .debug_line    0x00000f0b      0x211 build/app/demo/main.o
- .debug_line    0x0000111c       0x64 build/kernel/arch/arm/cortex-m4/os_context.o
+ .debug_line    0x000000fe       0xfe build/bsp/stm32f407g-disc1/system/systick.o
+ .debug_line    0x000001fc      0x32e build/kernel/src/os_kernel.o
+ .debug_line    0x0000052a      0x2c9 build/kernel/src/queue.o
+ .debug_line    0x000007f3      0x269 build/kernel/src/semaphore.o
+ .debug_line    0x00000a5c      0x1e6 build/drivers/stm32f4/src/uart.o
+ .debug_line    0x00000c42      0x2d6 build/lib/src/mem.o
+ .debug_line    0x00000f18      0x211 build/app/demo/main.o
+ .debug_line    0x00001129       0x64 build/kernel/arch/arm/cortex-m4/os_context.o
 
 .debug_str      0x00000000      0x640
  .debug_str     0x00000000      0x640 build/bsp/stm32f407g-disc1/startup/startup.o
                                 0x1e5 (size before relaxing)
  .debug_str     0x00000640      0x1be build/bsp/stm32f407g-disc1/system/systick.o
- .debug_str     0x00000640      0x2cd build/kernel/src/os_kernel.o
+ .debug_str     0x00000640      0x2d5 build/kernel/src/os_kernel.o
  .debug_str     0x00000640      0x2e0 build/kernel/src/queue.o
  .debug_str     0x00000640      0x2b0 build/kernel/src/semaphore.o
  .debug_str     0x00000640      0x1f2 build/drivers/stm32f4/src/uart.o

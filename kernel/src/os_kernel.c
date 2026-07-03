@@ -105,6 +105,8 @@ void osScheduler()
 
 void SysTick_Handler(void)
 {
+    _osTick++;
+
     for (uint8_t i = 0; i < _taskCount; i++)
     {
         if (_tcbs[i].state == TASK_BLOCKED)

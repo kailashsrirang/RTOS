@@ -13,10 +13,15 @@ volatile uint32_t _osTick = 0;
 void SysTick_Init(uint32_t tickRateHz)
 
 {
+    if (tickRateHz == 0)
+    {
+        return;
+    }
 
     uint32_t reloadVal = (CPU_CLOCK_HZ / tickRateHz) - 1;
-    SYST_CSR = (1U << 2) | (1U << 1) | (1U << 0); // bit2=processor clock, bit1=enable interrupt, bit0=enable timer
     SYST_RVR = reloadVal;
+
+    SYST_CSR = (1U << 2) | (1U << 1) | (1U << 0); // bit2=processor clock, bit1=enable interrupt, bit0=enable timer
 
     SYST_CVR = 0; // clear current value
 }
