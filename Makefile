@@ -5,43 +5,70 @@ CC      = $(TOOLCHAIN)-gcc
 OBJCOPY = $(TOOLCHAIN)-objcopy
 SIZE    = $(TOOLCHAIN)-size
 
-# CPU flags for Cortex-M4 with FPU
-CFLAGS  = -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard
+BUILD_DIR = build
+
+# CPU flags for STM32F407: Cortex-M4 with single-precision FPU
+CPU_FLAGS = -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard
+
+# Include paths
+INCLUDES = \
+	-Ikernel/include \
+	-Idrivers/stm32f4/include \
+	-Ilib/include
+
+# Compiler flags
+CFLAGS = $(CPU_FLAGS)
 CFLAGS += -Wall -Wextra -O0 -g
 CFLAGS += -ffreestanding -nostdlib
+CFLAGS += -ffunction-sections -fdata-sections
+CFLAGS += $(INCLUDES)
 
-LDFLAGS = -T stm32f407.ld -Wl,--gc-sections
+# Linker flags
+LDFLAGS = $(CPU_FLAGS)
+LDFLAGS += -T bsp/stm32f407g-disc1/linker/stm32f407.ld
+LDFLAGS += -Wl,--gc-sections
+LDFLAGS += -Wl,-Map=$(BUILD_DIR)/$(TARGET).map
+LDFLAGS += -nostdlib
 
-C_SRCS = Core/startup.c \
-         Core/mutex.c \
-         Core/uart.c \
-         Core/queue.c \
-         Core/semaphore.c \
-         Core/systick.c \
-         Core/os_kernel.c \
-         Core/main.c \
-		Core/mem.c
+# Source files
+C_SRCS = \
+	bsp/stm32f407g-disc1/startup/startup.c \
+	bsp/stm32f407g-disc1/system/systick.c \
+	$(wildcard kernel/src/*.c) \
+	$(wildcard drivers/stm32f4/src/*.c) \
+	$(wildcard lib/src/*.c) \
+	app/demo/main.c
 
-ASM_SRCS = Core/os_context.s
+ASM_SRCS = \
+	$(wildcard kernel/arch/arm/cortex-m4/*.s)
 
-OBJS = $(C_SRCS:.c=.o) $(ASM_SRCS:.s=.o)
+# Object files
+C_OBJS   = $(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SRCS))
+ASM_OBJS = $(patsubst %.s,$(BUILD_DIR)/%.o,$(ASM_SRCS))
+OBJS     = $(C_OBJS) $(ASM_OBJS)
 
-all: $(TARGET).elf
-	$(SIZE) $(TARGET).elf
+all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).bin
+	$(SIZE) $(BUILD_DIR)/$(TARGET).elf
 
-$(TARGET).elf: $(OBJS)
+$(BUILD_DIR)/$(TARGET).elf: $(OBJS)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
-%.o: %.c
+$(BUILD_DIR)/$(TARGET).bin: $(BUILD_DIR)/$(TARGET).elf
+	$(OBJCOPY) -O binary $< $@
+
+$(BUILD_DIR)/%.o: %.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-%.o: %.s
+$(BUILD_DIR)/%.o: %.s
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-flash: $(TARGET).elf
+flash: $(BUILD_DIR)/$(TARGET).elf
 	openocd -f interface/stlink.cfg \
 	        -f target/stm32f4x.cfg \
-	        -c "program $(TARGET).elf verify reset exit"
+	        -c "program $(BUILD_DIR)/$(TARGET).elf verify reset exit"
 
 clean:
-	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin
+	rm -rf $(BUILD_DIR)

@@ -35,6 +35,7 @@ uint8_t uart4_read(void)
     {
         // RXNE
     }
+
     return (uint8_t)UART4_DR;
 }
 
@@ -45,6 +46,7 @@ void uart4_write(uint8_t data)
     {
         // TXE
     }
+
     UART4_DR = data;
 }
 
@@ -71,7 +73,6 @@ void print_serial(char *c)
         uart4_write((uint8_t)*c);
         c++;
     }
-
     uart4_write('\r');
     uart4_write('\n');
 }
