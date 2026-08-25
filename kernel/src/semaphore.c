@@ -2,9 +2,9 @@
 #include <stdint.h>
 #include "os_kernel.h"
 #include <string.h>
+#include "os_interrupt.h"
 
-#define ICSR (*(volatile uint32_t *)0xE000ED04UL)
-
+extern void osScheduler(void);
 extern volatile uint32_t osCurrentTask;
 extern volatile TCB_t _tcbs[OS_MAX_TASKS];
 
@@ -36,74 +36,102 @@ static uint32_t _semDequeue(Sem_t *s)
     return newTaskIndex;
 }
 
-void SemInit(Sem_t *s, uint32_t initialCount, uint32_t maxCount)
+OsStatus SemInit(Sem_t *sem, uint32_t initialCount, uint32_t maxCount)
 {
+    if (sem == NULL)
+    {
+        return OS_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (maxCount == 0U)
+    {
+        return OS_ERROR_INVALID_ARGUMENT;
+    }
+
     if (initialCount > maxCount)
     {
-        initialCount = maxCount;
+        return OS_ERROR_INVALID_ARGUMENT;
     }
-    s->current = initialCount;
-    s->maxCount = maxCount;
-    memset(&s->waitQueue, 0, sizeof(s->waitQueue));
-    s->waitHead = 0;
-    s->waitTail = 0;
-    s->waitCount = 0;
+
+    sem->current = initialCount;
+    sem->maxCount = maxCount;
+
+    memset(sem->waitQueue, 0, sizeof(sem->waitQueue));
+    sem->waitHead = 0U;
+    sem->waitTail = 0U;
+    sem->waitCount = 0U;
+
+    return OS_OK;
 }
 
-uint8_t SemWait(Sem_t *s)
+OsStatus SemWait(Sem_t *sem)
 {
-    __asm volatile("CPSID I");
+    if (sem == NULL)
+    {
+        return OS_ERROR_INVALID_ARGUMENT;
+    }
 
-    if (s->current > 0)
+    uint32_t irqState = osIrqSave();
+
+    if (sem->current > 0U)
     {
-        /* have resources availble */
-        s->current--;
-        __asm volatile("CPSIE I");
-        return 1;
+        sem->current--;
+        osIrqRestore(irqState);
+        return OS_OK;
     }
-    else
+
+    if (!_semEnqueue(sem, osCurrentTask))
     {
-        /* need to wait*/
-        if (!_semEnqueue(s, osCurrentTask))
-        {
-            __asm volatile("CPSIE I");
-            return 0;
-        }
-        _tcbs[osCurrentTask].state = TASK_BLOCKED;
-        ICSR = (1U << 28); /* PendSV set pending */
-        __asm volatile("CPSIE I");
-        return 1;
+        osIrqRestore(irqState);
+        return OS_ERROR_WAIT_QUEUE_FULL;
     }
+    _tcbs[osCurrentTask].waitReason = TASK_WAIT_SEMAPHORE;
+    _tcbs[osCurrentTask].state = TASK_BLOCKED;
+    osScheduler();
+    osRequestContextSwitch();
+    osIrqRestore(irqState);
+
+    /*
+     * Execution resumes here after SemSignal() wakes
+     * this task and directly gives it the resource.
+     */
+    return OS_OK;
 }
 
-uint8_t SemSignal(Sem_t *s)
+OsStatus SemSignal(Sem_t *sem)
 {
-    __asm volatile("CPSID I");
-
-    if (s->waitCount > 0)
+    if (sem == NULL)
     {
-        uint32_t nextTask = _semDequeue(s);
+        return OS_ERROR_INVALID_ARGUMENT;
+    }
 
+    uint32_t irqState = osIrqSave();
+
+    if (sem->waitCount > 0U)
+    {
+        uint32_t nextTask = _semDequeue(sem);
         if (nextTask != SEM_NO_OWNER)
         {
-
+            /*
+             * Transfer the resource directly to the
+             * waiting task instead of incrementing current.
+             */
+            _tcbs[nextTask].waitReason = TASK_WAIT_NONE;
             _tcbs[nextTask].state = TASK_READY;
-
-            ICSR = (1U << 28); /* PendSV set pending */
-            __asm volatile("CPSIE I");
-            return 1;
+            osScheduler();
+            osRequestContextSwitch();
+            osIrqRestore(irqState);
+            return OS_OK;
         }
     }
-    if (s->current < s->maxCount)
+
+    if (sem->current >= sem->maxCount)
     {
-
-        s->current++;
-
-        __asm volatile("CPSIE I");
-        return 1;
+        osIrqRestore(irqState);
+        return OS_ERROR_RESOURCE_FULL;
     }
 
-    /* Semaphore already full */
-    __asm volatile("CPSIE I");
-    return 0;
+    sem->current++;
+    osIrqRestore(irqState);
+    return OS_OK;
 }

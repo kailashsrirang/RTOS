@@ -63,7 +63,7 @@ $(BUILD_DIR)/%.o: %.c
 
 $(BUILD_DIR)/%.o: %.s
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -x assembler-with-cpp -c -o $@ $<
 
 flash: $(BUILD_DIR)/$(TARGET).elf
 	openocd -f interface/stlink.cfg \

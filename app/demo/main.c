@@ -6,6 +6,11 @@
 #include "queue.h"
 #include "uart.h"
 #include "mem.h"
+#include "led.h"
+#include "gpio.h"
+#include "button.h"
+#include "os_status.h"
+#include "os_interrupt.h"
 
 #define RCC_BASE 0x40023800UL
 #define RCC_AHB1ENR (*(volatile uint32_t *)(RCC_BASE + 0x30))
@@ -18,146 +23,60 @@
 #define LED_RED (1U << 14)
 #define LED_BLUE (1U << 15)
 
-static Sem_t dataSem;
-Sem_t logSem;
-static Queue_t q;
+static volatile uint32_t taskCounters[7] = {0U};
 
-void taskReceiver(void *arg)
+static const uint32_t taskIndices[7] = {
+    0U,
+    1U,
+    2U,
+    3U,
+    4U,
+    5U,
+    6U};
+
+static volatile OsStatus extraTaskStatus;
+
+static void countingTask(void *arg)
 {
-    while (1)
-    {
-
-        SemWait(&dataSem);
-        /* Data arrived — process it */
-        char info[50];
-        snprintf(info, sizeof(info), " Got semaphore. consumer: toggling blue.");
-        SemWait(&logSem);
-        uart4_println(info);
-        SemSignal(&logSem);
-
-        GPIOD_ODR ^= LED_BLUE;
-        osTaskDelay(1000);
-    }
-}
-
-void taskProducer(void *arg)
-{
+    const uint32_t *taskIndex = arg;
 
     while (1)
     {
-        char info[100];
+        taskCounters[*taskIndex]++;
 
-        osTaskDelay(2000);
-        snprintf(info, sizeof(info), " Producer: toggling green.");
-        SemWait(&logSem);
-        uart4_println(info);
-        SemSignal(&logSem);
-
-        GPIOD_ODR ^= LED_GREEN;
-        SemSignal(&dataSem);
-
-        info[0] = '\0';
-        snprintf(info, sizeof(info), " Producer: semaphore released curval: %d", dataSem.current);
-        SemWait(&logSem);
-        uart4_println(info);
-        SemSignal(&logSem);
+        osTaskDelay(100U + (*taskIndex * 10U));
     }
-}
-
-void idleTask(void *arg)
-{
-    while (1)
-    {
-        __asm volatile("WFI");
-    }
-}
-
-void producer(void *arg)
-{
-    // uint8_t max = 4;
-    // uint8_t i = 0;
-    // while (1)
-    // {
-    //     GPIOD_ODR ^= LED_GREEN;
-
-    //     osQueueSend(&q, &i);
-    //     osTaskDelay(1000);
-
-    //     i = (i + 1) % max;
-    // }'
-    while (1)
-    {
-        GPIOD_ODR ^= LED_GREEN;
-
-        char info[100];
-        snprintf(info, sizeof(info), " Producer: toggling green.");
-        SemWait(&logSem);
-        uart4_println(info);
-        SemSignal(&logSem);
-
-        osTaskDelay(1000);
-    }
-}
-
-void consumer(void *arg)
-{
-
-    while (1)
-    {
-        GPIOD_ODR ^= LED_BLUE;
-
-        char info[50];
-        snprintf(info, sizeof(info), " consumer: toggling blue.");
-        SemWait(&logSem);
-
-        uart4_println(info);
-        SemSignal(&logSem);
-
-        osTaskDelay(3000);
-    }
-    // while (1)
-    // {
-
-    //     uint8_t item;
-    //     osQueueReceive(&q, &item);
-
-    //     if (item == 0)
-    //         GPIOD_ODR ^= LED_BLUE;
-    //     else if (item == 1)
-    //         GPIOD_ODR ^= LED_ORANGE;
-    //     else if (item == 2)
-    //         GPIOD_ODR ^= LED_RED;
-
-    //     osTaskDelay(5000);
-    // }
 }
 
 int main(void)
 {
-    __asm volatile("CPSID I");
+    (void)osIrqSave();
 
-    RCC_AHB1ENR |= (1U << 3);
-
-    GPIOD_MODER &= ~(0xFFU << 24);
-    GPIOD_MODER |= (0x55U << 24);
-
-    uart4_init();
     osKernelInit();
-    // char info[50];
 
-    osQueueInit(&q, sizeof(uint8_t));
+    for (uint8_t i = 0U; i < 7U; i++)
+    {
+        OsStatus status = osTaskCreate(
+            countingTask,
+            (void *)&taskIndices[i]);
 
-    SemInit(&dataSem, 0, 1);
-    SemInit(&logSem, 1, 1);
+        if (status != OS_OK)
+        {
+            while (1)
+            {
+            }
+        }
+    }
 
-    osTaskCreate(taskProducer, NULL);
-    osTaskCreate(taskReceiver, NULL);
-    osTaskCreate(idleTask, NULL);
+    extraTaskStatus = osTaskCreate(
+        countingTask,
+        (void *)&taskIndices[0]);
 
-    SysTick_Init(1000);
+    SysTick_Init(1000U);
+
     osKernelStart();
 
-    // Safely format a string into the 'info' buffer
-
-    return 0;
+    while (1)
+    {
+    }
 }

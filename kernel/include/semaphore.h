@@ -3,21 +3,35 @@
 
 #include <stdint.h>
 
-#define SEM_QUEUE_SIZE 8
-#define SEM_NO_OWNER 0xFFFFFFFFUL
+#include "os_status.h"
+
+#define SEM_QUEUE_SIZE 8U
+
+#define SEM_NO_OWNER UINT32_MAX
 
 typedef struct
 {
     volatile uint32_t current;
+
     uint32_t maxCount;
+
     uint32_t waitQueue[SEM_QUEUE_SIZE];
+
     uint8_t waitHead;
+
     uint8_t waitTail;
+
     uint8_t waitCount;
+
 } Sem_t;
 
-void SemInit(Sem_t *s, uint32_t initialCount, uint32_t maxCount);
-uint8_t SemWait(Sem_t *s);
-uint8_t SemSignal(Sem_t *s);
+OsStatus SemInit(
+    Sem_t *sem,
+    uint32_t initialCount,
+    uint32_t maxCount);
+
+OsStatus SemWait(Sem_t *sem);
+
+OsStatus SemSignal(Sem_t *sem);
 
 #endif

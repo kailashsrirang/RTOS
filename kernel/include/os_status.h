@@ -1,0 +1,22 @@
+#ifndef OS_STATUS_H
+#define OS_STATUS_H
+
+typedef enum
+{
+    OS_OK = 0,
+
+    OS_ERROR_INVALID_ARGUMENT,
+
+    OS_ERROR_NO_TASK_SLOTS,
+
+    OS_ERROR_WAIT_QUEUE_FULL,
+
+    OS_ERROR_NOT_OWNER,
+
+    OS_ERROR_ALREADY_OWNED,
+
+    OS_ERROR_RESOURCE_FULL
+
+} OsStatus;
+
+#endif

@@ -1,3 +1,5 @@
+#include "os_tcb_offsets.h"
+
 .syntax unified
 .cpu cortex-m4
 .thumb
@@ -18,7 +20,7 @@ PendSV_Handler:
     LDR     R2, [R1]             /* R2 = osCurrentTask index */
     LDR     R3, =_tcbs
     
-    MOV     R4, #12
+    MOV     R4, #OS_TCB_SIZE_BYTES
     MUL     R2, R2, R4           /* offset = index * 12 (TCB size =  bytes) */
     
     ADD     R3, R3, R2           /* R3 = &_tcbs[osCurrentTask] */
@@ -32,7 +34,7 @@ PendSV_Handler:
     /* Load next task's PSP from its TCB */
     LDR     R3, =_tcbs
 
-    MOV     R1, #12
+    MOV     R1, #OS_TCB_SIZE_BYTES
     MUL     R4, R4, R1          
 
     ADD     R3, R3, R4           /* R3 = &_tcbs[osNextTask] */

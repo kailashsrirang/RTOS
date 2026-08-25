@@ -11,21 +11,26 @@
 volatile uint32_t _osTick = 0;
 
 void SysTick_Init(uint32_t tickRateHz)
-
 {
-    if (tickRateHz == 0)
+    if (tickRateHz == 0U)
     {
         return;
     }
 
-    uint32_t reloadVal = (CPU_CLOCK_HZ / tickRateHz) - 1;
-    SYST_RVR = reloadVal;
+    uint32_t reloadVal =
+        (CPU_CLOCK_HZ / tickRateHz) - 1U;
 
-    SYST_CSR = (1U << 2) | (1U << 1) | (1U << 0); // bit2=processor clock, bit1=enable interrupt, bit0=enable timer
+    SYST_CSR = 0U; // Disable SysTick while changing its configuration.
 
-    SYST_CVR = 0; // clear current value
+    SYST_RVR = reloadVal; // configure reload cycle
+
+    SYST_CVR = 0U; // cear current counter val
+
+    SYST_CSR =
+        (1U << 2) | // use processor clock.
+        (1U << 1) | // enable SysTick exception.
+        (1U << 0);  // enable the counter.
 }
-
 uint32_t osGetTick(void)
 
 {

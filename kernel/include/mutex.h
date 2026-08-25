@@ -2,15 +2,16 @@
 #define MUTEX_H
 
 #include <stdint.h>
+#include "os_status.h"
 
 #define MUTEX_QUEUE_SIZE 8
-#define MUTEX_NO_OWNER 0xFFFFFFFFUL
+#define MUTEX_NO_OWNER UINT32_MAX
 
 typedef struct mutex
 {
     /* data */
     volatile uint8_t locked;
-    volatile uint8_t ownerTask;
+    volatile uint32_t ownerTask;
     uint32_t waitQueue[MUTEX_QUEUE_SIZE];
     uint8_t waitHead;
     uint8_t waitTail;
@@ -21,8 +22,8 @@ typedef struct mutex
 uint8_t _mutexEnqueue(Mutex_t *mutex, uint32_t taskIndex);
 uint32_t _mutexDequeue(Mutex_t *mutex);
 
-void osMutexInit(Mutex_t *mutex);
-void osMutexAcquire(Mutex_t *mutex);
-void osMutexRelease(Mutex_t *mutex);
+OsStatus osMutexInit(Mutex_t *mutex);
+OsStatus osMutexAcquire(Mutex_t *mutex);
+OsStatus osMutexRelease(Mutex_t *mutex);
 
 #endif

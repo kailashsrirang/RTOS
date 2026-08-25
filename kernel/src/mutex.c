@@ -3,108 +3,159 @@
 #include <stddef.h>
 #include "os_kernel.h"
 #include <string.h>
+#include "os_interrupt.h"
 
-#define ICSR (*(volatile uint32_t *)0xE000ED04UL)
-
+extern void osScheduler(void);
 extern volatile uint32_t osCurrentTask;
 extern volatile TCB_t _tcbs[OS_MAX_TASKS];
 
-void osMutexInit(Mutex_t *mutex)
+OsStatus osMutexInit(Mutex_t *mutex)
 {
-    /* Initailze mutex queue*/
-    mutex->waitCount = 0;
-    mutex->waitHead = 0;
-    mutex->waitTail = 0;
-    memset(&mutex->waitQueue, 0, sizeof(mutex->waitQueue));
+    if (mutex == NULL)
+    {
+        return OS_ERROR_INVALID_ARGUMENT;
+    }
 
-    /* Initailze mutex */
-    mutex->locked = 0;
+    mutex->waitCount = 0U;
+
+    mutex->waitHead = 0U;
+
+    mutex->waitTail = 0U;
+
+    memset(
+        mutex->waitQueue,
+        0,
+        sizeof(mutex->waitQueue));
+
+    mutex->locked = 0U;
+
     mutex->ownerTask = MUTEX_NO_OWNER;
+
+    return OS_OK;
 }
 
 /* Atomic try-lock using exclusive monitor */
 static uint8_t _mutexTryLock(volatile uint8_t *lock)
 {
     uint32_t result;
-    uint32_t tmp; /* Store inital lock value */
-
-    /*Example*/
-    // __asm__ volatile (
-    //     "CODE"          /* The Assembly instructions */
-    //     : [outputs]     /* 1st Colon: Where results go (C variables) */
-    //     : [inputs]      /* 2nd Colon: Where data comes from (C variables) */
-    //     : "clobbers"    /* 3rd Colon: The "Warning" or "Clobber" list */
-    // );
-
-    /* STREX returns 0 on success, 1 on failure */
-    /* We invert: return 1 on success, 0 on failure */
+    uint32_t tmp;
 
     __asm volatile(
-        "LDREXB  %[tmp], [%[lock]]       \n" /* Load exclusive */
-        "CMP    %[tmp], #0              \n"  /* Unlocked? */
-        "BNE    1f                      \n"  /* No  */
-        "MOV    %[tmp], #1              \n"
-        "STREXB  %[res], %[tmp], [%[lock]]\n" /* Try to store */
-        "B      2f                      \n"
-        "1:                             \n"
-        "MOV    %[res], #1              \n" /* Failed — res = 1 (nonzero = fail) */
-        "2:                             \n"
-        "DMB                            \n" /* Data memory barrier */
+        "LDREXB  %[tmp], [%[lock]]        \n"  /* Load current lock value */
+        "CMP     %[tmp], #0               \n"  /* Is it unlocked (0)? */
+        "BNE     1f                       \n"  /* If locked (!= 0), branch out */
+        "MOV     %[tmp], #1               \n"  /* Value to store */
+        "STREXB  %[res], %[tmp], [%[lock]] \n" /* Attempt store (res=0 success, res=1 fail) */
+        "DMB                              \n"  /* Acquire barrier: Sync memory on success */
+        "B       2f                       \n"  /* Exit */
+        "1:                               \n"
+        "CLREX                            \n" /* Clear exclusive monitor if STREXB was skipped */
+        "MOV     %[res], #1               \n" /* Mark as failure */
+        "2:                               \n"
         : [res] "=&r"(result), [tmp] "=&r"(tmp)
         : [lock] "r"(lock)
-        : "cc", "memory"); /*My assebly code is goign to the change the status flags (N,Z,V,C). Do not assyme they stay the same*/
-    return (result == 0) ? 1 : 0;
+        : "cc", "memory");
+
+    return (result == 0) ? 1U : 0U; /* 1 = acquired, 0 = failed */
 }
 
-void osMutexAcquire(Mutex_t *mutex)
+OsStatus osMutexAcquire(Mutex_t *mutex)
 {
-    __asm volatile("CPSID I");
+    if (mutex == NULL)
+    {
+        return OS_ERROR_INVALID_ARGUMENT;
+    }
 
-    if (!_mutexTryLock(&(mutex->locked)))
+    uint32_t irqState = osIrqSave();
+
+    if ((mutex->locked != 0U) &&
+        (mutex->ownerTask == osCurrentTask))
+    {
+        osIrqRestore(irqState);
+
+        return OS_ERROR_ALREADY_OWNED;
+    }
+
+    if (!_mutexTryLock(&mutex->locked))
     {
         if (!_mutexEnqueue(mutex, osCurrentTask))
         {
-            __asm volatile("CPSIE I");
-            return;
+            osIrqRestore(irqState);
+
+            return OS_ERROR_WAIT_QUEUE_FULL;
         }
+
+        _tcbs[osCurrentTask].waitReason = TASK_WAIT_MUTEX;
         _tcbs[osCurrentTask].state = TASK_BLOCKED;
-        ICSR = (1U << 28); /* PendSV set pending */
+        osScheduler();
+        osRequestContextSwitch();
+        osIrqRestore(irqState);
+
+        /*
+         * Once this task resumes, the mutex should have been
+         * transferred to it by osMutexRelease().
+         */
+        return OS_OK;
     }
-    else
-    {
-        mutex->ownerTask = osCurrentTask;
-    }
-    __asm volatile("CPSIE I");
+
+    mutex->ownerTask = osCurrentTask;
+
+    osIrqRestore(irqState);
+
+    return OS_OK;
 }
 
-void osMutexRelease(Mutex_t *mutex)
+OsStatus osMutexRelease(Mutex_t *mutex)
 {
-    __asm volatile("CPSID I");
-
-    if (mutex->ownerTask != osCurrentTask)
+    if (mutex == NULL)
     {
-        __asm volatile("CPSIE I");
-        return;
+        return OS_ERROR_INVALID_ARGUMENT;
+    }
+
+    uint32_t irqState = osIrqSave();
+
+    if ((mutex->locked == 0U) ||
+        (mutex->ownerTask != osCurrentTask))
+    {
+        osIrqRestore(irqState);
+
+        return OS_ERROR_NOT_OWNER;
     }
 
     uint32_t nextOwner = _mutexDequeue(mutex);
+
     if (nextOwner != MUTEX_NO_OWNER)
     {
-        _tcbs[nextOwner].state = TASK_READY;
+        /*
+         * Keep the mutex locked and transfer ownership
+         * directly to the next waiting task.
+         */
         mutex->ownerTask = nextOwner;
-        ICSR = (1U << 28); /* PendSV set pending */
-        __asm volatile("CPSIE I");
-        return;
-    }
-    else
-    {
-        mutex->ownerTask = MUTEX_NO_OWNER;
-        __asm volatile("DMB" ::: "memory"); /* Ensure all previous memory writes are visible before the mutex is unlocked  */
+        _tcbs[nextOwner].waitReason = TASK_WAIT_NONE;
+        _tcbs[nextOwner].state = TASK_READY;
+        osScheduler();
+        osRequestContextSwitch();
+        osIrqRestore(irqState);
 
-        mutex->locked = 0;
+        return OS_OK;
     }
-    ICSR = (1U << 28); /* PendSV set pending */
-    __asm volatile("CPSIE I");
+
+    /*
+     * No task is waiting, so fully unlock the mutex.
+     */
+    mutex->ownerTask = MUTEX_NO_OWNER;
+
+    __asm volatile("DMB" ::: "memory");
+
+    mutex->locked = 0U;
+
+    osScheduler();
+
+    osRequestContextSwitch();
+
+    osIrqRestore(irqState);
+
+    return OS_OK;
 }
 
 uint8_t _mutexEnqueue(Mutex_t *mutex, uint32_t taskIndex)
