@@ -1,2 +1,15 @@
+# Build outputs
+build/
 *.o
-rtos.elf
+*.elf
+*.bin
+*.map
+
+# macOS metadata
+.DS_Store
+__MACOSX/
+
+# Editor files
+.vscode/
+.idea/
+*.swp

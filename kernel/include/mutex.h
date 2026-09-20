@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "os_status.h"
 
-#define MUTEX_QUEUE_SIZE 8
+#define MUTEX_QUEUE_SIZE 8U
 #define MUTEX_NO_OWNER UINT32_MAX
 
 typedef struct mutex
@@ -18,9 +18,6 @@ typedef struct mutex
     uint8_t waitCount;
 
 } Mutex_t;
-
-uint8_t _mutexEnqueue(Mutex_t *mutex, uint32_t taskIndex);
-uint32_t _mutexDequeue(Mutex_t *mutex);
 
 OsStatus osMutexInit(Mutex_t *mutex);
 OsStatus osMutexAcquire(Mutex_t *mutex);

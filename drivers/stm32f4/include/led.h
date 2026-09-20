@@ -1,3 +1,5 @@
+#ifndef BOARD_LED_H
+#define BOARD_LED_H
 #include <stdbool.h>
 
 typedef enum
@@ -9,12 +11,8 @@ typedef enum
     BOARD_LED_COUNT
 } BoardLed;
 
-static const uint8_t boardLedPins[] = {
-    [BOARD_LED_ORANGE] = 13U,
-    [BOARD_LED_GREEN] = 12U,
-    [BOARD_LED_RED] = 14U,
-    [BOARD_LED_BLUE] = 15U};
-
 bool boardLedInit(void);
 bool boardLedSet(BoardLed led, bool on);
 bool boardLedToggle(BoardLed led);
+
+#endif

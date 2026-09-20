@@ -2,6 +2,7 @@
 #define OS_INTERRUPT_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define SCB_ICSR (*(volatile uint32_t *)0xE000ED04UL)
 #define ICSR_PENDSTCLR (1U << 25)
@@ -48,6 +49,37 @@ static inline void osRequestContextSwitch(void)
 static inline void osClearPendingSchedulerExceptions(void)
 {
     SCB_ICSR = ICSR_PENDSTCLR | ICSR_PENDSVCLR;
+}
+
+static inline uint32_t osGetIpsr(void)
+{
+    uint32_t ipsr;
+
+    __asm volatile(
+        "MRS %0, IPSR"
+        : "=r"(ipsr));
+    return ipsr;
+}
+
+static inline bool osIsInInterruptContext(void)
+{
+    return ((osGetIpsr() & 0x1FF) != 0U);
+}
+
+static inline uint32_t osGetPrimask(void)
+{
+    uint32_t primask;
+
+    __asm volatile(
+        "MRS %0, PRIMASK"
+        : "=r"(primask));
+    return primask;
+}
+
+static inline bool osAreInterruptsDisabled(void)
+{
+
+    return ((osGetPrimask() & 1U) != 0U);
 }
 
 #endif

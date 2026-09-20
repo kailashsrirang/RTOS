@@ -25,13 +25,13 @@ typedef struct
 
 } Sem_t;
 
-OsStatus SemInit(
+OsStatus osSemaphoreInit(
     Sem_t *sem,
     uint32_t initialCount,
     uint32_t maxCount);
 
-OsStatus SemWait(Sem_t *sem);
+OsStatus osSemaphoreWait(Sem_t *sem);
 
-OsStatus SemSignal(Sem_t *sem);
+OsStatus osSemaphoreSignal(Sem_t *sem);
 
 #endif

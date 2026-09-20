@@ -1,12 +1,13 @@
 #include "semaphore.h"
 #include <stdint.h>
 #include "os_kernel.h"
-#include <string.h>
+#include "mem.h"
 #include "os_interrupt.h"
+#include "os_kernel_internal.h"
 
-extern void osScheduler(void);
-extern volatile uint32_t osCurrentTask;
-extern volatile TCB_t _tcbs[OS_MAX_TASKS];
+_Static_assert(SEM_QUEUE_SIZE > 0U, "Semaphore wait queue must contain at least one entry");
+_Static_assert(SEM_QUEUE_SIZE <= UINT8_MAX, "Semaphore wait queue size exceeds the wait counters");
+_Static_assert(SEM_QUEUE_SIZE >= (OS_MAX_TASKS - 1U), "Semaphore wait queue cannot hold every application task");
 
 static uint8_t _semEnqueue(Sem_t *s, uint32_t taskIndex)
 {
@@ -16,7 +17,7 @@ static uint8_t _semEnqueue(Sem_t *s, uint32_t taskIndex)
     }
 
     s->waitQueue[s->waitTail] = taskIndex;
-    s->waitTail = (s->waitTail + 1) % SEM_QUEUE_SIZE;
+    s->waitTail = (uint8_t)((s->waitTail + 1) % SEM_QUEUE_SIZE);
     s->waitCount++;
 
     return 1;
@@ -30,13 +31,13 @@ static uint32_t _semDequeue(Sem_t *s)
 
     uint32_t newTaskIndex = s->waitQueue[s->waitHead];
 
-    s->waitHead = (s->waitHead + 1) % SEM_QUEUE_SIZE;
+    s->waitHead = (uint8_t)((s->waitHead + 1) % SEM_QUEUE_SIZE);
     s->waitCount--;
 
     return newTaskIndex;
 }
 
-OsStatus SemInit(Sem_t *sem, uint32_t initialCount, uint32_t maxCount)
+OsStatus osSemaphoreInit(Sem_t *sem, uint32_t initialCount, uint32_t maxCount)
 {
     if (sem == NULL)
     {
@@ -53,6 +54,16 @@ OsStatus SemInit(Sem_t *sem, uint32_t initialCount, uint32_t maxCount)
         return OS_ERROR_INVALID_ARGUMENT;
     }
 
+    if (osIsInInterruptContext())
+    {
+        return OS_ERROR_ISR_CONTEXT;
+    }
+
+    if (osKernelIsRunning())
+    {
+        return OS_ERROR_INVALID_STATE;
+    }
+
     sem->current = initialCount;
     sem->maxCount = maxCount;
 
@@ -64,11 +75,26 @@ OsStatus SemInit(Sem_t *sem, uint32_t initialCount, uint32_t maxCount)
     return OS_OK;
 }
 
-OsStatus SemWait(Sem_t *sem)
+OsStatus osSemaphoreWait(Sem_t *sem)
 {
     if (sem == NULL)
     {
         return OS_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!osKernelIsRunning())
+    {
+        return OS_ERROR_INVALID_STATE;
+    }
+
+    if (osIsInInterruptContext())
+    {
+        return OS_ERROR_ISR_CONTEXT; // executing in handler mode. ISR can't amke blocking calls.
+    }
+
+    if (osAreInterruptsDisabled())
+    {
+        return OS_ERROR_INTERRUPTS_DISABLED; // interrupts already disabled in caller
     }
 
     uint32_t irqState = osIrqSave();
@@ -92,17 +118,32 @@ OsStatus SemWait(Sem_t *sem)
     osIrqRestore(irqState);
 
     /*
-     * Execution resumes here after SemSignal() wakes
+     * Execution resumes here after osSemaphoreSignal() wakes
      * this task and directly gives it the resource.
      */
     return OS_OK;
 }
 
-OsStatus SemSignal(Sem_t *sem)
+OsStatus osSemaphoreSignal(Sem_t *sem)
 {
     if (sem == NULL)
     {
         return OS_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!osKernelIsRunning())
+    {
+        return OS_ERROR_INVALID_STATE;
+    }
+
+    if (osIsInInterruptContext())
+    {
+        return OS_ERROR_ISR_CONTEXT; // executing in handler mode. ISR can't amke blocking calls.
+    }
+
+    if (osAreInterruptsDisabled())
+    {
+        return OS_ERROR_INTERRUPTS_DISABLED; // interrupts already disabled in caller
     }
 
     uint32_t irqState = osIrqSave();

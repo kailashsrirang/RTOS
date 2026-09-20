@@ -3,9 +3,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "os_interrupt.h"
+#include "os_kernel_internal.h"
 
 #define SCB_SHPR3 (*(volatile uint32_t *)0xE000ED20UL)
-
 #define SCB_SHPR3_PENDSV_SHIFT 16U
 #define SCB_SHPR3_SYSTICK_SHIFT 24U
 
@@ -14,16 +14,41 @@
 
 #define OS_INVALID_TASK_INDEX UINT32_MAX
 
-static uint32_t _taskStacks[OS_MAX_TASKS][OS_STACK_SIZE]
-    __attribute__((aligned(8))); /* Static stack storage for all tasks */
+#define OS_STACK_FILL_PATTERN UINT32_C(0xA5A5A5A5)
+#define OS_STACK_CANARY UINT32_C(0xDEADBEEF)
 
-volatile TCB_t _tcbs[OS_MAX_TASKS]; /* TCB array — one per task slot */
+#define OS_INITIAL_TASK_FRAME_WORDS 16U
+
+_Static_assert(
+    OS_STACK_SIZE > OS_INITIAL_TASK_FRAME_WORDS,
+    "Task stack must contain space for the initial frame and canary");
+
+typedef enum
+{
+    OS_KERNEL_UNINITIALIZED = 0,
+    OS_KERNEL_INITIALIZED,
+    OS_KERNEL_RUNNING
+} OsKernelState;
+
+static volatile OsKernelState osKernelState = OS_KERNEL_UNINITIALIZED;
+
+static uint32_t _taskStacks[OS_MAX_TASKS][OS_STACK_SIZE] __attribute__((aligned(8))); /* Static stack storage for all tasks */
 
 static volatile uint8_t _taskCount = 0; /* Number of tasks created so far */
 extern volatile uint32_t _osTick;
-volatile uint32_t osCurrentTask = 0; /* Index of currently running task */
-volatile uint32_t osNextTask = 0;    /* Index of next task to run (set by scheduler) */
+volatile uint32_t osNextTask = 0; /* Index of next task to run (set by scheduler) */
 static uint32_t _idleTaskIndex = OS_INVALID_TASK_INDEX;
+volatile uint32_t osStackOverflowTask = OS_INVALID_TASK_INDEX;
+
+volatile TCB_t _tcbs[OS_MAX_TASKS];
+volatile uint32_t osCurrentTask = 0U;
+
+static OsStatus createTaskInternal(void (*taskFunc)(void *), void *arg);
+
+bool osKernelIsRunning(void)
+{
+    return (osKernelState == OS_KERNEL_RUNNING);
+}
 
 static void osIdleTask(void *arg)
 {
@@ -44,6 +69,16 @@ static void osIdleTask(void *arg)
 static void _initTaskStack(uint8_t taskIndex, void (*taskFunc)(void *), void *arg)
 {
     uint32_t *stack = _taskStacks[taskIndex];
+
+    // fill stack with fill pattern
+    for (uint32_t i = 0U; i < OS_STACK_SIZE; i++)
+    {
+        stack[i] = OS_STACK_FILL_PATTERN;
+    }
+
+    stack[0] = OS_STACK_CANARY; // the lowest portion of the stack will have the canary value to indicate end of stack
+    /* IOW Corruption of this word indicates that the stack reached its limit. */
+
     uint32_t stackTop = OS_STACK_SIZE;
 
     /* Simulate the hardware exception stack frame */
@@ -82,8 +117,19 @@ static void osConfigureExceptionPriorities(void)
     SCB_SHPR3 = registerValue;
 }
 
-void osKernelInit(void)
+OsStatus osKernelInit(void)
 {
+
+    if (osIsInInterruptContext())
+    {
+        return OS_ERROR_ISR_CONTEXT; // kernel init modifies tcb and task stack therefore must run in thread mode
+    }
+
+    if (osKernelState != OS_KERNEL_UNINITIALIZED)
+    {
+        return OS_ERROR_INVALID_STATE;
+    }
+
     /* Clear any pending SysTick or PendSV exceptions */
     osClearPendingSchedulerExceptions();
 
@@ -95,21 +141,43 @@ void osKernelInit(void)
     _taskCount = 0;
     osCurrentTask = 0;
     osNextTask = 0;
-    memset(_tcbs, 0, sizeof(_tcbs));
+
+    for (uint32_t i = 0U; i < OS_MAX_TASKS; i++)
+    {
+        _tcbs[i].stackPtr = NULL;
+        _tcbs[i].state = TASK_TERMINATED;
+        _tcbs[i].waitReason = TASK_WAIT_NONE;
+        _tcbs[i].delayTicks = 0U;
+    }
     memset(_taskStacks, 0, sizeof(_taskStacks));
 
     _idleTaskIndex = _taskCount; /* First task is the idle task */
-    if (osTaskCreate(osIdleTask, NULL) != OS_OK)
+    OsStatus idleStatus = createTaskInternal(osIdleTask, NULL);
+
+    if (idleStatus != OS_OK)
     {
-        while (1)
-        {
-            __asm volatile("BKPT #0");
-        }
+        return idleStatus;
     }
+
     _tcbs[_idleTaskIndex].state = TASK_RUNNING;
+    osKernelState = OS_KERNEL_INITIALIZED;
+    return OS_OK;
 }
 
 OsStatus osTaskCreate(void (*taskFunc)(void *), void *arg)
+{
+    if (osIsInInterruptContext())
+    {
+        return OS_ERROR_ISR_CONTEXT;
+    }
+
+    if (osKernelState != OS_KERNEL_INITIALIZED)
+    {
+        return OS_ERROR_INVALID_STATE;
+    }
+    return createTaskInternal(taskFunc, arg);
+}
+static OsStatus createTaskInternal(void (*taskFunc)(void *), void *arg)
 {
     if (taskFunc == NULL)
     {
@@ -130,12 +198,40 @@ OsStatus osTaskCreate(void (*taskFunc)(void *), void *arg)
 
     return OS_OK;
 }
+
+static void osHandleStackOverflow(uint32_t taskIndex)
+{
+    __asm volatile("CPSID I" ::: "memory");
+
+    osStackOverflowTask = taskIndex;
+
+    __asm volatile("DSB" ::: "memory");
+
+    while (1)
+    {
+        __asm volatile("WFI");
+    }
+}
+
+static void osCheckTaskStacks(void)
+{
+    for (uint8_t i = 0; i < _taskCount; i++)
+    {
+        if (_taskStacks[i][0] != OS_STACK_CANARY)
+        {
+            osHandleStackOverflow(i);
+        }
+    }
+}
+
 void osScheduler(void)
 {
     if (_taskCount == 0U)
     {
         return;
     }
+
+    osCheckTaskStacks();
 
     uint32_t selectedTask = _idleTaskIndex;
     uint8_t next = (uint8_t)((osCurrentTask + 1U) % _taskCount);
@@ -169,6 +265,11 @@ void osScheduler(void)
 
 void SysTick_Handler(void)
 {
+    if (osKernelState != OS_KERNEL_RUNNING)
+    {
+        return;
+    }
+
     _osTick++;
 
     for (uint8_t i = 0; i < _taskCount; i++)
@@ -191,19 +292,30 @@ void SysTick_Handler(void)
 
     if (osNextTask != osCurrentTask) /* Prevent useless context switch */
     {
-        // char info[50];
-        // snprintf(info, sizeof(info), "Os scheduler chose osNextTask %d. PendingSV...", osNextTask);
-        // uart4_println(info);
-
         osRequestContextSwitch();
     }
 }
 
-void osTaskDelay(uint32_t ticks)
+OsStatus osTaskDelay(uint32_t ticks)
 {
     if (ticks == 0U)
     {
-        return;
+        return OS_OK;
+    }
+
+    if (!osKernelIsRunning())
+    {
+        return OS_ERROR_INVALID_STATE;
+    }
+
+    if (osIsInInterruptContext())
+    {
+        return OS_ERROR_ISR_CONTEXT; // executing in handler mode. ISR can't amke blocking calls.
+    }
+
+    if (osAreInterruptsDisabled())
+    {
+        return OS_ERROR_INTERRUPTS_DISABLED; // interrupts already disabled in caller
     }
 
     uint32_t irqState = osIrqSave();
@@ -217,10 +329,13 @@ void osTaskDelay(uint32_t ticks)
     osRequestContextSwitch(); /* PendSV set pending */
 
     osIrqRestore(irqState); /* Return interrupt Enable/Disable back to original state */
+
+    return OS_OK;
 }
 
-__attribute__((naked, noreturn)) void osKernelStart(void)
+__attribute__((naked, noreturn)) static void startFirstTask(void)
 {
+
     /* Point PSP at task 0's saved stack */
     __asm volatile(
         "LDR R0, =_tcbs             \n" /* R0 = base of TCB array */
@@ -240,6 +355,25 @@ __attribute__((naked, noreturn)) void osKernelStart(void)
         // "POP {PC}                   \n" /* Jump to task 0 entry point */
 
     );
+}
+
+OsStatus osKernelStart(void)
+{
+    uint32_t irqState = osIrqSave();
+
+    if (osIsInInterruptContext())
+    {
+        osIrqRestore(irqState);
+        return OS_ERROR_ISR_CONTEXT;
+    }
+
+    if (osKernelState != OS_KERNEL_INITIALIZED)
+    {
+        osIrqRestore(irqState);
+        return OS_ERROR_INVALID_STATE;
+    }
+    osKernelState = OS_KERNEL_RUNNING;
+    startFirstTask();
 }
 
 void osTaskExit(void)
@@ -263,4 +397,39 @@ void osTaskExit(void)
     {
         __asm volatile("WFI");
     }
+}
+
+OsStatus osTaskGetStackHighWaterMark(uint32_t taskIndex, uint32_t *peakUsedWords)
+{
+    if (taskIndex >= _taskCount)
+    {
+        return OS_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (peakUsedWords == NULL)
+    {
+        return OS_ERROR_INVALID_ARGUMENT;
+    }
+
+    uint32_t irqState = osIrqSave();
+
+    if (_taskStacks[taskIndex][0] != OS_STACK_CANARY)
+    {
+        osIrqRestore(irqState);
+        return OS_ERROR_STACK_OVERFLOW;
+    }
+    uint32_t firstUsedIndex = 1U;
+    while (
+        (firstUsedIndex < OS_STACK_SIZE) &&
+        (_taskStacks[taskIndex][firstUsedIndex] == OS_STACK_FILL_PATTERN))
+
+    {
+        firstUsedIndex++;
+    }
+
+    *peakUsedWords = OS_STACK_SIZE - firstUsedIndex;
+
+    osIrqRestore(irqState);
+
+    return OS_OK;
 }

@@ -1,6 +1,22 @@
 #include <stdint.h>
 #include "uart.h"
-#include "mem.h"
+
+/* ===== register definitions ===== */
+#define RCC_BASE 0x40023800UL
+#define GPIOA_BASE 0x40020000UL
+#define UART4_BASE 0x40004C00UL
+
+#define RCC_AHB1ENR (*(volatile uint32_t *)(RCC_BASE + 0x30))
+#define RCC_APB1ENR (*(volatile uint32_t *)(RCC_BASE + 0x40))
+
+#define GPIOA_MODER (*(volatile uint32_t *)(GPIOA_BASE + 0x00))
+#define GPIOA_PUPDR (*(volatile uint32_t *)(GPIOA_BASE + 0x0C))
+#define GPIOA_AFRL (*(volatile uint32_t *)(GPIOA_BASE + 0x20))
+
+#define UART4_SR (*(volatile uint32_t *)(UART4_BASE + 0x00))
+#define UART4_DR (*(volatile uint32_t *)(UART4_BASE + 0x04))
+#define UART4_BRR (*(volatile uint32_t *)(UART4_BASE + 0x08))
+#define UART4_CR1 (*(volatile uint32_t *)(UART4_BASE + 0x0C))
 
 /* ===== init ===== */
 void uart4_init(void)
@@ -51,7 +67,7 @@ void uart4_write(uint8_t data)
 }
 
 /* ===== print ===== */
-void uart4_print(char *s)
+void uart4_print(const char *s)
 {
     while (*s)
     {
@@ -59,29 +75,9 @@ void uart4_print(char *s)
     }
 }
 
-void uart4_println(char *s)
+void uart4_println(const char *s)
 {
     uart4_print(s);
     uart4_write('\r');
     uart4_write('\n');
-}
-
-void print_serial(char *c)
-{
-    while (*c != '\0')
-    {
-        uart4_write((uint8_t)*c);
-        c++;
-    }
-    uart4_write('\r');
-    uart4_write('\n');
-}
-
-/* ===== delay ===== */
-void delay(volatile uint32_t count)
-{
-    while (count--)
-    {
-        __asm volatile("nop");
-    }
 }

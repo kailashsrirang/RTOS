@@ -1,3 +1,5 @@
+#ifndef STM32F4_GPIO_H
+#define STM32F4_GPIO_H
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -178,3 +180,4 @@ bool gpioConfigureAlternate(GpioRegisters *gpio,
                             GpioOutputType type,
                             GpioSpeed speed,
                             GpioPull pull);
+#endif /* STM32F4_GPIO_H */

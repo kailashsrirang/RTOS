@@ -8,7 +8,7 @@ SIZE    = $(TOOLCHAIN)-size
 BUILD_DIR = build
 
 # CPU flags for STM32F407: Cortex-M4 with single-precision FPU
-CPU_FLAGS = -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard
+CPU_FLAGS = -mcpu=cortex-m4 -mthumb -mfloat-abi=soft
 
 # Include paths
 INCLUDES = \
@@ -16,9 +16,23 @@ INCLUDES = \
 	-Idrivers/stm32f4/include \
 	-Ilib/include
 
+WARNING_FLAGS = \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-Wconversion \
+	-Wsign-conversion \
+	-Wshadow \
+	-Wundef \
+	-Wstrict-prototypes \
+	-Wmissing-prototypes \
+	-Werror
+
 # Compiler flags
 CFLAGS = $(CPU_FLAGS)
-CFLAGS += -Wall -Wextra -O0 -g
+CFLAGS += -std=c11
+CFLAGS += $(WARNING_FLAGS)
+CFLAGS += -O0 -g
 CFLAGS += -ffreestanding -nostdlib
 CFLAGS += -ffunction-sections -fdata-sections
 CFLAGS += $(INCLUDES)
@@ -33,7 +47,6 @@ LDFLAGS += -nostdlib
 # Source files
 C_SRCS = \
 	bsp/stm32f407g-disc1/startup/startup.c \
-	bsp/stm32f407g-disc1/system/systick.c \
 	$(wildcard kernel/src/*.c) \
 	$(wildcard drivers/stm32f4/src/*.c) \
 	$(wildcard lib/src/*.c) \

@@ -2,18 +2,32 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "os_kernel.h"
-#include <string.h>
+#include "mem.h"
 #include "os_interrupt.h"
+#include "os_kernel_internal.h"
 
-extern void osScheduler(void);
-extern volatile uint32_t osCurrentTask;
-extern volatile TCB_t _tcbs[OS_MAX_TASKS];
+static bool _mutexTryLock(volatile uint8_t *locked);
+static bool _mutexEnqueue(Mutex_t *mutex, uint32_t taskIndex);
+static uint32_t _mutexDequeue(Mutex_t *mutex);
 
+_Static_assert(MUTEX_QUEUE_SIZE > 0U, "Mutex wait queue must contain at least one entry");
+_Static_assert(MUTEX_QUEUE_SIZE <= UINT8_MAX, "Mutex wait queue size exceeds the wait counters");
+_Static_assert(MUTEX_QUEUE_SIZE >= (OS_MAX_TASKS - 1U), "Mutex wait queue cannot hold every application task");
 OsStatus osMutexInit(Mutex_t *mutex)
 {
     if (mutex == NULL)
     {
         return OS_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (osIsInInterruptContext())
+    {
+        return OS_ERROR_ISR_CONTEXT;
+    }
+
+    if (osKernelIsRunning())
+    {
+        return OS_ERROR_INVALID_STATE;
     }
 
     mutex->waitCount = 0U;
@@ -22,10 +36,7 @@ OsStatus osMutexInit(Mutex_t *mutex)
 
     mutex->waitTail = 0U;
 
-    memset(
-        mutex->waitQueue,
-        0,
-        sizeof(mutex->waitQueue));
+    memset(mutex->waitQueue, 0, sizeof(mutex->waitQueue));
 
     mutex->locked = 0U;
 
@@ -34,29 +45,23 @@ OsStatus osMutexInit(Mutex_t *mutex)
     return OS_OK;
 }
 
-/* Atomic try-lock using exclusive monitor */
-static uint8_t _mutexTryLock(volatile uint8_t *lock)
+/*
+ * Protected check-and-set
+ * The caller must hold the kernel crit section
+ */
+static bool _mutexTryLock(volatile uint8_t *lock)
 {
-    uint32_t result;
-    uint32_t tmp;
+    // caler will hold crit section
+    if (*lock != 0U)
+    {
+        return false;
+    }
 
-    __asm volatile(
-        "LDREXB  %[tmp], [%[lock]]        \n"  /* Load current lock value */
-        "CMP     %[tmp], #0               \n"  /* Is it unlocked (0)? */
-        "BNE     1f                       \n"  /* If locked (!= 0), branch out */
-        "MOV     %[tmp], #1               \n"  /* Value to store */
-        "STREXB  %[res], %[tmp], [%[lock]] \n" /* Attempt store (res=0 success, res=1 fail) */
-        "DMB                              \n"  /* Acquire barrier: Sync memory on success */
-        "B       2f                       \n"  /* Exit */
-        "1:                               \n"
-        "CLREX                            \n" /* Clear exclusive monitor if STREXB was skipped */
-        "MOV     %[res], #1               \n" /* Mark as failure */
-        "2:                               \n"
-        : [res] "=&r"(result), [tmp] "=&r"(tmp)
-        : [lock] "r"(lock)
-        : "cc", "memory");
+    *lock = 1U;
 
-    return (result == 0) ? 1U : 0U; /* 1 = acquired, 0 = failed */
+    __asm volatile("DMB" ::: "memory");
+
+    return true;
 }
 
 OsStatus osMutexAcquire(Mutex_t *mutex)
@@ -64,6 +69,21 @@ OsStatus osMutexAcquire(Mutex_t *mutex)
     if (mutex == NULL)
     {
         return OS_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!osKernelIsRunning())
+    {
+        return OS_ERROR_INVALID_STATE;
+    }
+
+    if (osIsInInterruptContext())
+    {
+        return OS_ERROR_ISR_CONTEXT; // executing in handler mode. ISR can't amke blocking calls.
+    }
+
+    if (osAreInterruptsDisabled())
+    {
+        return OS_ERROR_INTERRUPTS_DISABLED; // interrupts already disabled in caller
     }
 
     uint32_t irqState = osIrqSave();
@@ -112,6 +132,21 @@ OsStatus osMutexRelease(Mutex_t *mutex)
         return OS_ERROR_INVALID_ARGUMENT;
     }
 
+    if (!osKernelIsRunning())
+    {
+        return OS_ERROR_INVALID_STATE;
+    }
+
+    if (osIsInInterruptContext())
+    {
+        return OS_ERROR_ISR_CONTEXT; // executing in handler mode. ISR can't amke blocking calls.
+    }
+
+    if (osAreInterruptsDisabled())
+    {
+        return OS_ERROR_INTERRUPTS_DISABLED; // interrupts already disabled in caller
+    }
+
     uint32_t irqState = osIrqSave();
 
     if ((mutex->locked == 0U) ||
@@ -123,6 +158,8 @@ OsStatus osMutexRelease(Mutex_t *mutex)
     }
 
     uint32_t nextOwner = _mutexDequeue(mutex);
+
+    __asm volatile("DMB" ::: "memory");
 
     if (nextOwner != MUTEX_NO_OWNER)
     {
@@ -145,20 +182,14 @@ OsStatus osMutexRelease(Mutex_t *mutex)
      */
     mutex->ownerTask = MUTEX_NO_OWNER;
 
-    __asm volatile("DMB" ::: "memory");
-
     mutex->locked = 0U;
-
-    osScheduler();
-
-    osRequestContextSwitch();
 
     osIrqRestore(irqState);
 
     return OS_OK;
 }
 
-uint8_t _mutexEnqueue(Mutex_t *mutex, uint32_t taskIndex)
+static bool _mutexEnqueue(Mutex_t *mutex, uint32_t taskIndex)
 {
     if (mutex->waitCount >= MUTEX_QUEUE_SIZE)
     {
@@ -166,12 +197,12 @@ uint8_t _mutexEnqueue(Mutex_t *mutex, uint32_t taskIndex)
     }
 
     mutex->waitQueue[mutex->waitTail] = taskIndex;
-    mutex->waitTail = (mutex->waitTail + 1) % MUTEX_QUEUE_SIZE;
+    mutex->waitTail = (uint8_t)((mutex->waitTail + 1U) % MUTEX_QUEUE_SIZE);
     mutex->waitCount++;
 
     return 1;
 }
-uint32_t _mutexDequeue(Mutex_t *mutex)
+static uint32_t _mutexDequeue(Mutex_t *mutex)
 {
     if (mutex->waitCount == 0)
     {
@@ -180,7 +211,7 @@ uint32_t _mutexDequeue(Mutex_t *mutex)
 
     uint32_t newTaskIndex = mutex->waitQueue[mutex->waitHead];
 
-    mutex->waitHead = (mutex->waitHead + 1) % MUTEX_QUEUE_SIZE;
+    mutex->waitHead = (uint8_t)((mutex->waitHead + 1) % MUTEX_QUEUE_SIZE);
     mutex->waitCount--;
 
     return newTaskIndex;

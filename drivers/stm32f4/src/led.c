@@ -4,6 +4,12 @@
 #include "gpio.h"
 #include "led.h"
 
+static const uint8_t boardLedPins[BOARD_LED_COUNT] = {
+    [BOARD_LED_ORANGE] = 13U,
+    [BOARD_LED_GREEN] = 12U,
+    [BOARD_LED_RED] = 14U,
+    [BOARD_LED_BLUE] = 15U};
+
 bool boardLedInit(void)
 {
     if (!gpioEnableClock(GPIOD))

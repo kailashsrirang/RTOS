@@ -1,23 +1,24 @@
 #include "queue.h"
 #include <stdint.h>
 #include "os_kernel.h"
-#include <string.h>
+#include "mem.h"
 #include "os_interrupt.h"
+#include "os_kernel_internal.h"
 
-_Static_assert(
-    QUEUE_WAIT_SIZE >= (OS_MAX_TASKS - 1U),
-    "Queue waiting list cannot hold every application task");
-
-extern void osScheduler(void);
-extern volatile uint32_t osCurrentTask;
-extern volatile TCB_t _tcbs[OS_MAX_TASKS];
+_Static_assert(QUEUE_WAIT_SIZE >= (OS_MAX_TASKS - 1U), "Queue waiting list cannot hold every application task");
+_Static_assert(QUEUE_WAIT_SIZE > 0U, "Queue wait list must contain at least one entry");
+_Static_assert(QUEUE_WAIT_SIZE <= UINT8_MAX, "Queue wait list size exceeds the wait counters");
+_Static_assert(QUEUE_MAX_ITEMS > 0U, "Queue must hold at least one item");
+_Static_assert(QUEUE_MAX_ITEMS <= UINT8_MAX, "Queue capacity exceeds the item counters");
+_Static_assert(QUEUE_ITEM_SIZE > 0U, "Queue items must contain at least one byte");
+_Static_assert(QUEUE_ITEM_SIZE <= UINT8_MAX, "Queue item size exceeds the itemSize field");
 
 static uint32_t _dequeue(uint32_t *queue, uint8_t *head, uint8_t *count)
 {
     if (*count == 0)
         return QUEUE_NO_TASK;
     uint32_t nextTask = queue[*head];
-    *head = (*head + 1) % QUEUE_WAIT_SIZE;
+    *head = (uint8_t)((*head + 1) % QUEUE_WAIT_SIZE);
     (*count)--;
     return nextTask;
 }
@@ -30,7 +31,7 @@ static OsStatus _enqueue(uint32_t *queue, uint8_t *tail, uint8_t *count, uint32_
         return OS_ERROR_WAIT_QUEUE_FULL;
     }
     queue[*tail] = taskIndex;
-    *tail = (*tail + 1) % QUEUE_WAIT_SIZE;
+    *tail = (uint8_t)((*tail + 1) % QUEUE_WAIT_SIZE);
     (*count)++;
     return OS_OK;
 }
@@ -66,6 +67,16 @@ OsStatus osQueueInit(Queue_t *queue, uint8_t itemSize)
         return OS_ERROR_INVALID_ARGUMENT;
     }
 
+    if (osIsInInterruptContext())
+    {
+        return OS_ERROR_ISR_CONTEXT;
+    }
+
+    if (osKernelIsRunning())
+    {
+        return OS_ERROR_INVALID_STATE;
+    }
+
     memset(queue, 0, sizeof(*queue));
     queue->itemSize = itemSize;
 
@@ -77,6 +88,21 @@ OsStatus osQueueSend(Queue_t *queue, const void *item)
     if ((queue == NULL) || (item == NULL))
     {
         return OS_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!osKernelIsRunning())
+    {
+        return OS_ERROR_INVALID_STATE;
+    }
+
+    if (osIsInInterruptContext())
+    {
+        return OS_ERROR_ISR_CONTEXT; // executing in handler mode. ISR can't amke blocking calls.
+    }
+
+    if (osAreInterruptsDisabled())
+    {
+        return OS_ERROR_INTERRUPTS_DISABLED; // interrupts already disabled in caller
     }
 
     uint32_t irqState = osIrqSave();
@@ -127,6 +153,21 @@ OsStatus osQueueReceive(Queue_t *queue, void *item)
     if ((queue == NULL) || (item == NULL))
     {
         return OS_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!osKernelIsRunning())
+    {
+        return OS_ERROR_INVALID_STATE;
+    }
+
+    if (osIsInInterruptContext())
+    {
+        return OS_ERROR_ISR_CONTEXT; // executing in handler mode. ISR can't amke blocking calls.
+    }
+
+    if (osAreInterruptsDisabled())
+    {
+        return OS_ERROR_INTERRUPTS_DISABLED; // interrupts already disabled in caller
     }
 
     uint32_t irqState = osIrqSave();
